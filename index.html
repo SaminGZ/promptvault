@@ -114,6 +114,17 @@ async function decryptWith(key){
 }
 
 async function boot(){
+  if(window.PV_DATA){ DATA = window.PV_DATA; showApp(); return; }   // no-password build
+  // key carried in the install link (#p=...) → unlock with no typing, ever
+  const fp = new URLSearchParams(location.hash.slice(1)).get('p');
+  if(fp){
+    try{
+      const key = await deriveKey(fp);
+      DATA = await decryptWith(key);
+      localStorage.setItem(LS_KEY, b64e(await crypto.subtle.exportKey("raw", key)));
+      showApp(); return;
+    }catch(e){}
+  }
   const saved = localStorage.getItem(LS_KEY);
   if(saved){
     try{
