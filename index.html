@@ -167,12 +167,34 @@ function renderRows(items, countText){
   });
   $('#list').innerHTML=''; $('#list').appendChild(frag);
 }
+function fuzzyTerms(q){
+  const t=new Set();
+  (q.match(/[a-z0-9]{2,}/g)||[]).forEach(x=>t.add(x));
+  q.replace(/[^一-鿿]+/g,' ').split(/\s+/).forEach(seg=>{
+    for(let i=0;i+2<=seg.length;i++) t.add(seg.slice(i,i+2));   // CJK 2-grams
+    if(seg.length===1) t.add(seg);
+  });
+  return [...t];
+}
+function fuzzy(q){
+  const terms=fuzzyTerms(q); if(!terms.length) return [];
+  const out=[];
+  for(const d of DATA){
+    const hay=(d.c+' '+(d.n||'')+' '+(d.t||'')+' '+d.x).toLowerCase();
+    let s=0; for(const t of terms) if(hay.includes(t)) s++;
+    if(s) out.push([d,s]);
+  }
+  out.sort((a,b)=>b[1]-a[1]);
+  return out.slice(0,60).map(x=>x[0]);
+}
 function render(q){
   q = q.trim().toLowerCase();
   $('#clear').style.display = q ? 'block' : 'none';
   let items = DATA;
   if(q){ items = DATA.filter(d => d.c.toLowerCase().includes(q) || (d.n&&d.n.toLowerCase().includes(q))
     || (d.t&&d.t.toLowerCase().includes(q)) || d.x.toLowerCase().includes(q)); }
+  // natural-language / multi-word query with no exact hit → relevance fallback (no model needed)
+  if(q && items.length===0){ const fz=fuzzy(q); if(fz.length){ renderRows(fz, '相关 '+fz.length+' 条'); return; } }
   renderRows(items, items.length + ' 条' + (q ? '（共 ' + DATA.length + '）' : ''));
 }
 /* ---- AI semantic search (opt-in, fail-safe → never breaks keyword search) ---- */
