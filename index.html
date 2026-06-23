@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="PromptVault">
+<meta name="theme-color" content="#fdfcf7">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>PromptVault</title>
+<style>
+  :root{--bg:#fdfcf7;--panel:rgba(255,252,247,0.97);--text:#3a3530;--muted:#a09888;
+    --sub:#6a6058;--accent:#c47a38;--line:rgba(160,140,110,0.18);--hit:rgba(196,122,56,0.12);}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{background:var(--bg);color:var(--text);
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;}
+  #lock{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:0 28px;gap:14px;background:var(--bg);text-align:center;}
+  #lock h1{color:var(--accent);font-size:22px;margin:0;}
+  #lock p{color:var(--sub);font-size:14px;margin:0;}
+  #pw{width:100%;max-width:320px;font-size:18px;padding:13px 16px;border-radius:13px;
+    border:1px solid var(--line);background:#fff;color:var(--text);outline:none;text-align:center;}
+  #pw:focus{border-color:var(--accent);}
+  #go{max-width:320px;width:100%;padding:13px;border:none;border-radius:13px;background:var(--accent);
+    color:#fff;font-size:17px;font-weight:600;}
+  #lockmsg{color:#c0392b;font-size:13px;min-height:16px;}
+  #top{position:sticky;top:0;z-index:5;background:var(--panel);backdrop-filter:saturate(1.4) blur(8px);
+    padding:calc(env(safe-area-inset-top) + 12px) 14px 10px;border-bottom:1px solid var(--line);}
+  #search{width:100%;font-size:18px;padding:13px 40px 13px 16px;border-radius:13px;
+    border:1px solid var(--line);background:rgba(160,140,110,0.06);color:var(--text);outline:none;}
+  #search:focus{border-color:var(--accent);background:#fff;}
+  #clear{position:absolute;right:26px;top:calc(env(safe-area-inset-top) + 22px);width:26px;height:26px;
+    border:none;border-radius:50%;background:rgba(160,140,110,0.18);color:var(--sub);font-size:15px;display:none;}
+  #count{font-size:12px;color:var(--muted);padding:6px 4px 0;}
+  #list{padding:6px 10px 40px;}
+  .row{padding:13px 14px;border-radius:12px;border:1px solid transparent;margin:5px 0;
+    background:rgba(160,140,110,0.05);cursor:pointer;transition:background .12s;}
+  .row:active{background:var(--hit);border-color:var(--accent);}
+  .row .code{font-weight:700;color:var(--accent);font-size:16px;}
+  .row .tag{font-size:11px;color:var(--muted);float:right;font-weight:600;}
+  .row .note{color:var(--sub);font-size:14px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .row .preview{color:var(--muted);font-size:12px;margin-top:4px;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  #empty{color:var(--muted);text-align:center;padding:40px 20px;display:none;}
+  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 28px);
+    transform:translateX(-50%) translateY(20px);background:#34c759;color:#fff;padding:11px 22px;border-radius:22px;
+    font-weight:600;font-size:15px;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:20;
+    box-shadow:0 6px 20px rgba(0,0,0,.18);}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  #sheet{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:30;align-items:flex-end;}
+  #sheetInner{background:var(--bg);width:100%;max-height:80%;border-radius:18px 18px 0 0;
+    padding:16px 16px calc(env(safe-area-inset-bottom) + 16px);display:flex;flex-direction:column;}
+  #sheet h3{margin:4px 0 8px;color:var(--accent);font-size:15px;}
+  #sheetText{flex:1;width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px;
+    line-height:1.6;color:var(--text);background:#fff;resize:none;min-height:180px;}
+  #sheetHint{font-size:13px;color:var(--sub);margin:10px 0;}
+  #sheetClose{padding:12px;border:none;border-radius:11px;background:var(--accent);color:#fff;font-weight:600;font-size:16px;}
+</style>
+</head>
+<body>
+  <div id="lock">
+    <h1>PromptVault</h1>
+    <p>第一次打开输一次密码，以后这台手机直接进。</p>
+    <input id="pw" type="password" inputmode="text" autocapitalize="off" autocorrect="off" placeholder="密码">
+    <button id="go">打开</button>
+    <div id="lockmsg"></div>
+  </div>
+
+  <div id="app" hidden>
+    <div id="top">
+      <input id="search" type="search" inputmode="search" autocapitalize="off" autocorrect="off"
+        autocomplete="off" placeholder="🔍 输入代码或关键词">
+      <button id="clear">✕</button>
+      <div id="count"></div>
+    </div>
+    <div id="list"></div>
+    <div id="empty">没有匹配的 Prompt</div>
+    <div id="toast">✅ 已复制</div>
+    <div id="sheet"><div id="sheetInner">
+      <h3 id="sheetTitle"></h3>
+      <textarea id="sheetText" readonly></textarea>
+      <div id="sheetHint">长按上面文字 → 全选 → 拷贝（自动复制不可用时用这个）</div>
+      <button id="sheetClose">关闭</button>
+    </div></div>
+  </div>
+
+<script src="data.js"></script>
+<script>
+const SALT = Uint8Array.from("9f1c7a3e5b2d48f06c91a4e7d3b85102".match(/../g).map(h=>parseInt(h,16)));
+const ITERS = 200000;
+const LS_KEY = "pv-key-v1";
+const $ = s => document.querySelector(s);
+let DATA = [], toastTimer;
+
+function b64d(s){return Uint8Array.from(atob(s), c=>c.charCodeAt(0));}
+function b64e(u){return btoa(String.fromCharCode(...new Uint8Array(u)));}
+
+async function deriveKey(pass){
+  const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2", salt:SALT, iterations:ITERS, hash:"SHA-256"},
+    km, {name:"AES-GCM", length:256}, true, ["decrypt"]);
+}
+async function decryptWith(key){
+  const raw = b64d(window.PV_ENC);
+  const iv = raw.slice(0,12), ct = raw.slice(12);
+  const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv}, key, ct);
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+
+async function boot(){
+  const saved = localStorage.getItem(LS_KEY);
+  if(saved){
+    try{
+      const key = await crypto.subtle.importKey("raw", b64d(saved), {name:"AES-GCM", length:256}, true, ["decrypt"]);
+      DATA = await decryptWith(key); showApp(); return;
+    }catch(e){ localStorage.removeItem(LS_KEY); }
+  }
+  $('#pw').focus();
+}
+async function unlock(){
+  $('#lockmsg').textContent = '';
+  try{
+    const key = await deriveKey($('#pw').value);
+    DATA = await decryptWith(key);
+    const raw = await crypto.subtle.exportKey("raw", key);
+    localStorage.setItem(LS_KEY, b64e(raw));
+    showApp();
+  }catch(e){ $('#lockmsg').textContent = '密码不对，再试一次'; }
+}
+function showApp(){
+  $('#lock').style.display='none'; $('#app').hidden=false;
+  render(''); $('#search').focus();
+}
+
+function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function render(q){
+  q = q.trim().toLowerCase();
+  $('#clear').style.display = q ? 'block' : 'none';
+  let items = DATA;
+  if(q){ items = DATA.filter(d => d.c.toLowerCase().includes(q) || (d.n&&d.n.toLowerCase().includes(q))
+    || (d.t&&d.t.toLowerCase().includes(q)) || d.x.toLowerCase().includes(q)); }
+  $('#count').textContent = items.length + ' 条' + (q ? '（共 ' + DATA.length + '）' : '');
+  $('#empty').style.display = items.length ? 'none' : 'block';
+  const frag = document.createDocumentFragment();
+  items.slice(0,300).forEach(d => {
+    const row = document.createElement('div'); row.className='row';
+    row.innerHTML = (d.t?'<span class="tag">#'+esc(d.t)+'</span>':'') + '<span class="code">'+esc(d.c)+'</span>'
+      + '<div class="note">'+esc(d.n||'')+'</div>' + '<div class="preview">'+esc(d.x.slice(0,90))+'</div>';
+    row.onclick = () => copy(d); frag.appendChild(row);
+  });
+  $('#list').innerHTML=''; $('#list').appendChild(frag);
+}
+function showToast(){ $('#toast').classList.add('show'); clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>$('#toast').classList.remove('show'), 1300); }
+async function copy(d){
+  try{ if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(d.x); showToast(); return; } }catch(e){}
+  try{ const ta=document.createElement('textarea'); ta.value=d.x; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0,d.x.length);
+    const ok=document.execCommand('copy'); document.body.removeChild(ta); if(ok){ showToast(); return; } }catch(e){}
+  $('#sheetTitle').textContent = d.c + (d.n?' · '+d.n:''); $('#sheetText').value = d.x;
+  $('#sheet').style.display='flex'; setTimeout(()=>{ $('#sheetText').focus(); $('#sheetText').setSelectionRange(0,d.x.length); }, 50);
+}
+
+$('#go').onclick = unlock;
+$('#pw').addEventListener('keydown', e => { if(e.key==='Enter') unlock(); });
+$('#sheetClose').onclick = ()=> $('#sheet').style.display='none';
+$('#sheet').onclick = e => { if(e.target.id==='sheet') $('#sheet').style.display='none'; };
+$('#search').addEventListener('input', e => render(e.target.value));
+$('#clear').onclick = ()=>{ $('#search').value=''; render(''); $('#search').focus(); };
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+boot();
+</script>
+</body>
+</html>
