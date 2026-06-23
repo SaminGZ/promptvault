@@ -29,12 +29,14 @@
     color:#fff;font-size:17px;font-weight:600;}
   #lockmsg{color:#c0392b;font-size:13px;min-height:16px;}
   #top{position:sticky;top:0;z-index:5;background:var(--panel);backdrop-filter:saturate(1.4) blur(8px);
-    padding:calc(env(safe-area-inset-top) + 12px) 14px 10px;border-bottom:1px solid var(--line);}
-  #search{width:100%;font-size:18px;padding:13px 40px 13px 16px;border-radius:13px;
-    border:1px solid var(--line);background:rgba(160,140,110,0.06);color:var(--text);outline:none;}
-  #search:focus{border-color:var(--accent);background:#fff;}
-  #clear{position:absolute;right:26px;top:calc(env(safe-area-inset-top) + 22px);width:26px;height:26px;
-    border:none;border-radius:50%;background:rgba(160,140,110,0.18);color:var(--sub);font-size:15px;display:none;}
+    padding:calc(env(safe-area-inset-top) + 18px) 16px 14px;border-bottom:1px solid var(--line);}
+  #search{width:100%;font-size:22px;padding:20px 48px 20px 20px;border-radius:18px;font-weight:500;
+    border:2px solid var(--accent);background:#fff;color:var(--text);outline:none;
+    box-shadow:0 6px 18px rgba(196,122,56,0.16);}
+  #search::placeholder{color:var(--muted);font-weight:400;}
+  #search:focus{border-color:var(--accent);background:#fff;box-shadow:0 6px 22px rgba(196,122,56,0.24);}
+  #clear{position:absolute;right:30px;top:calc(env(safe-area-inset-top) + 38px);width:28px;height:28px;
+    border:none;border-radius:50%;background:rgba(160,140,110,0.18);color:var(--sub);font-size:16px;display:none;}
   #count{font-size:12px;color:var(--muted);padding:6px 4px 0;}
   #list{padding:6px 10px 40px;}
   .row{padding:13px 14px;border-radius:12px;border:1px solid transparent;margin:5px 0;
@@ -42,7 +44,7 @@
   .row:active{background:var(--hit);border-color:var(--accent);}
   .row .code{font-weight:700;color:var(--accent);font-size:16px;}
   .row .tag{font-size:11px;color:var(--muted);float:right;font-weight:600;}
-  .row .note{color:var(--sub);font-size:14px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .row .note{color:var(--text);font-size:16px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .row .preview{color:var(--muted);font-size:12px;margin-top:4px;
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
   #empty{color:var(--muted);text-align:center;padding:40px 20px;display:none;}
@@ -149,7 +151,7 @@ function render(q){
   items.slice(0,300).forEach(d => {
     const row = document.createElement('div'); row.className='row';
     row.innerHTML = (d.t?'<span class="tag">#'+esc(d.t)+'</span>':'') + '<span class="code">'+esc(d.c)+'</span>'
-      + '<div class="note">'+esc(d.n||'')+'</div>' + '<div class="preview">'+esc(d.x.slice(0,90))+'</div>';
+      + '<div class="note">'+esc(d.n||'')+'</div>';
     row.onclick = () => copy(d); frag.appendChild(row);
   });
   $('#list').innerHTML=''; $('#list').appendChild(frag);
