@@ -37,7 +37,11 @@
   #search:focus{border-color:var(--accent);background:#fff;box-shadow:0 6px 22px rgba(196,122,56,0.24);}
   #clear{position:absolute;right:30px;top:calc(env(safe-area-inset-top) + 38px);width:28px;height:28px;
     border:none;border-radius:50%;background:rgba(160,140,110,0.18);color:var(--sub);font-size:16px;display:none;}
-  #count{font-size:12px;color:var(--muted);padding:6px 4px 0;}
+  #toprow{display:flex;align-items:center;justify-content:space-between;padding:9px 4px 0;}
+  #count{font-size:12px;color:var(--muted);}
+  #aibtn{font-size:13px;font-weight:600;color:var(--sub);background:rgba(160,140,110,0.12);
+    border:1px solid var(--line);border-radius:20px;padding:6px 14px;}
+  #aibtn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
   #list{padding:6px 10px 40px;}
   .row{padding:13px 14px;border-radius:12px;border:1px solid transparent;margin:5px 0;
     background:rgba(160,140,110,0.05);cursor:pointer;transition:background .12s;}
@@ -77,7 +81,7 @@
       <input id="search" type="search" inputmode="search" autocapitalize="off" autocorrect="off"
         autocomplete="off" placeholder="🔍 输入代码或关键词">
       <button id="clear">✕</button>
-      <div id="count"></div>
+      <div id="toprow"><div id="count"></div><button id="aibtn">🧠 AI 语义</button></div>
     </div>
     <div id="list"></div>
     <div id="empty">没有匹配的 Prompt</div>
@@ -91,6 +95,7 @@
   </div>
 
 <script src="data.js"></script>
+<script src="vec.js"></script>
 <script>
 const SALT = Uint8Array.from("9f1c7a3e5b2d48f06c91a4e7d3b85102".match(/../g).map(h=>parseInt(h,16)));
 const ITERS = 200000;
@@ -150,13 +155,8 @@ function showApp(){
 }
 
 function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
-function render(q){
-  q = q.trim().toLowerCase();
-  $('#clear').style.display = q ? 'block' : 'none';
-  let items = DATA;
-  if(q){ items = DATA.filter(d => d.c.toLowerCase().includes(q) || (d.n&&d.n.toLowerCase().includes(q))
-    || (d.t&&d.t.toLowerCase().includes(q)) || d.x.toLowerCase().includes(q)); }
-  $('#count').textContent = items.length + ' 条' + (q ? '（共 ' + DATA.length + '）' : '');
+function renderRows(items, countText){
+  $('#count').textContent = countText;
   $('#empty').style.display = items.length ? 'none' : 'block';
   const frag = document.createDocumentFragment();
   items.slice(0,300).forEach(d => {
@@ -166,6 +166,50 @@ function render(q){
     row.onclick = () => copy(d); frag.appendChild(row);
   });
   $('#list').innerHTML=''; $('#list').appendChild(frag);
+}
+function render(q){
+  q = q.trim().toLowerCase();
+  $('#clear').style.display = q ? 'block' : 'none';
+  let items = DATA;
+  if(q){ items = DATA.filter(d => d.c.toLowerCase().includes(q) || (d.n&&d.n.toLowerCase().includes(q))
+    || (d.t&&d.t.toLowerCase().includes(q)) || d.x.toLowerCase().includes(q)); }
+  renderRows(items, items.length + ' 条' + (q ? '（共 ' + DATA.length + '）' : ''));
+}
+/* ---- AI semantic search (opt-in, fail-safe → never breaks keyword search) ---- */
+let aiOn=false, aiExtractor=null, aiVEC=null, aiTimer=null;
+function aiLoadVecs(){
+  if(aiVEC || !window.PV_VEC) return;
+  const raw=atob(window.PV_VEC), n=window.PV_VN, dim=window.PV_VDIM, a=new Int8Array(n*dim);
+  for(let i=0;i<raw.length;i++) a[i]=(raw.charCodeAt(i)<<24)>>24;   // bytes → signed int8
+  aiVEC={a,n,dim};
+}
+function aiTimeout(p, ms){ return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('AI timeout')), ms))]); }
+async function aiEnsure(){
+  if(aiExtractor) return aiExtractor;
+  const m = await aiTimeout(import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0'), 30000);
+  m.env.allowLocalModels=false;
+  aiExtractor = await aiTimeout(m.pipeline('feature-extraction','Xenova/bge-small-zh-v1.5',{dtype:'q8'}), 120000);
+  return aiExtractor;
+}
+async function aiSearch(q){
+  aiLoadVecs(); const ex=await aiEnsure();
+  const o=await ex((window.PV_VINSTR||'')+q,{pooling:'mean',normalize:true});
+  const qv=o.data, {a,n,dim}=aiVEC, out=[];
+  for(let i=0;i<n;i++){ let s=0; const off=i*dim; for(let d=0;d<dim;d++) s+=(a[off+d]/127)*qv[d]; out.push([i,s]); }
+  out.sort((x,y)=>y[1]-x[1]);
+  return out.slice(0,40).map(x=>DATA[x[0]]);
+}
+function doSearch(){
+  const q=$('#search').value.trim();
+  $('#clear').style.display = q ? 'block' : 'none';
+  if(aiOn && q){
+    $('#count').textContent='🧠 AI 理解中…';
+    clearTimeout(aiTimer);
+    aiTimer=setTimeout(async()=>{
+      try{ const items=await aiSearch(q); renderRows(items, '🧠 语义匹配 · 前 '+items.length+' 条'); }
+      catch(e){ render(q); }   // any AI failure → silently fall back to keyword
+    }, 350);
+  } else { render(q); }
 }
 function showToast(){ $('#toast').classList.add('show'); clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>$('#toast').classList.remove('show'), 1300); }
@@ -182,8 +226,9 @@ $('#go').onclick = unlock;
 $('#pw').addEventListener('keydown', e => { if(e.key==='Enter') unlock(); });
 $('#sheetClose').onclick = ()=> $('#sheet').style.display='none';
 $('#sheet').onclick = e => { if(e.target.id==='sheet') $('#sheet').style.display='none'; };
-$('#search').addEventListener('input', e => render(e.target.value));
-$('#clear').onclick = ()=>{ $('#search').value=''; render(''); $('#search').focus(); };
+$('#search').addEventListener('input', doSearch);
+$('#clear').onclick = ()=>{ $('#search').value=''; doSearch(); $('#search').focus(); };
+$('#aibtn').onclick = ()=>{ aiOn=!aiOn; $('#aibtn').classList.toggle('on',aiOn); if(aiOn) aiEnsure().catch(()=>{}); doSearch(); };
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
 boot();
 </script>
