@@ -1,5 +1,5 @@
-// PromptVault offline service worker — build 20260721181806
-const CACHE = 'pv-20260721181806';
+// PromptVault offline service worker — build 20260722200032
+const CACHE = 'pv-20260722200032';
 const SHELL = ['./','index.html','manifest.webmanifest','icon-180.png','icon-192.png','icon-512.png'];
 self.addEventListener('install', e => { self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.concat(['data.js','vec.js'])))); });
