@@ -260,7 +260,13 @@ $('#sheetClose').onclick = ()=> $('#sheet').style.display='none';
 $('#sheet').onclick = e => { if(e.target.id==='sheet') $('#sheet').style.display='none'; };
 $('#search').addEventListener('input', doSearch);
 $('#clear').onclick = ()=>{ $('#search').value=''; doSearch(); $('#search').focus(); };
-if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+if('serviceWorker' in navigator){
+  const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(hadController && !reloaded){ reloaded = true; location.reload(); }
+  });
+  navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(r => r.update()).catch(()=>{});
+}
 // iOS keeps a home-screen app alive in the background; data.js is only fetched on load.
 // Reopening after 10+ minutes reloads (network-first) so desktop edits show up.
 const LOADED_AT = Date.now();
