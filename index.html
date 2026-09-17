@@ -39,7 +39,10 @@
   #clear{position:absolute;right:30px;top:calc(env(safe-area-inset-top) + 38px);width:28px;height:28px;
     border:none;border-radius:50%;background:rgba(160,140,110,0.18);color:var(--sub);font-size:16px;display:none;}
   #toprow{display:flex;align-items:center;justify-content:space-between;padding:9px 4px 0;}
-  #count{font-size:12px;color:var(--muted);width:100%;text-align:center;}
+  #count{font-size:12px;color:var(--muted);}
+  #syncbtn{font-size:13px;font-weight:600;color:var(--sub);background:rgba(160,140,110,0.12);
+    border:1px solid var(--line);border-radius:20px;padding:6px 14px;}
+  #syncbtn:disabled{opacity:.55;}
   #aibtn{font-size:13px;font-weight:600;color:var(--sub);background:rgba(160,140,110,0.12);
     border:1px solid var(--line);border-radius:20px;padding:6px 14px;}
   #aibtn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
@@ -82,7 +85,7 @@
       <input id="search" type="search" inputmode="search" autocapitalize="off" autocorrect="off"
         autocomplete="off" placeholder="🔍 搜代码、短名或关键词">
       <button id="clear">✕</button>
-      <div id="toprow"><div id="count"></div></div>
+      <div id="toprow"><div id="count"></div><button id="syncbtn">🔄 同步</button></div>
     </div>
     <div id="list"></div>
     <div id="empty">没有匹配的 Prompt</div>
@@ -95,7 +98,6 @@
     </div></div>
   </div>
 
-<script src="data.js"></script>
 <script>
 const SALT = Uint8Array.from("9f1c7a3e5b2d48f06c91a4e7d3b85102".match(/../g).map(h=>parseInt(h,16)));
 const ITERS = 200000;
@@ -243,7 +245,7 @@ function doSearch(){
     }, 350);
   } else { render(q); }
 }
-function showToast(){ $('#toast').classList.add('show'); clearTimeout(toastTimer);
+function showToast(msg){ $('#toast').textContent = msg || '✅ 已复制'; $('#toast').classList.add('show'); clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>$('#toast').classList.remove('show'), 1300); }
 async function copy(d){
   try{ if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(d.x); showToast(); return; } }catch(e){}
@@ -254,6 +256,26 @@ async function copy(d){
   $('#sheet').style.display='flex'; setTimeout(()=>{ $('#sheetText').focus(); $('#sheetText').setSelectionRange(0,d.x.length); }, 50);
 }
 
+// location.reload() can reuse the in-memory copy of data.js; a new navigation always refetches it.
+function freshLoad(){ location.replace(location.pathname + '?r=' + Date.now()); }
+// 手动同步：去网上取电脑最新发布的那一份（电脑改动后约 5 分钟内会发布）；比手机上的新就重载。
+async function manualSync(){
+  const btn = $('#syncbtn'); btn.disabled = true; btn.textContent = '🔄 同步中…';
+  try{
+    const resp = await fetch('data.js?t=' + Date.now(), {cache:'no-store'});
+    if(resp.headers.get('X-PV-From-Cache') || !resp.ok) throw new Error('offline');
+    const txt = await resp.text();
+    const m = txt.match(/PV_BUILD="(\d+)"/); const remote = m ? m[1] : '';
+    if(remote && remote > String(window.PV_BUILD||'')){
+      try{ const r = await navigator.serviceWorker.getRegistration(); if(r) await r.update(); }catch(e){}
+      showToast('⬇️ 有新内容，正在更新…'); setTimeout(freshLoad, 600); return;
+    }
+    const b = String(window.PV_BUILD||'');
+    showToast('✅ 已是最新' + (b.length>=12 ? ' · ' + b.slice(4,6)+'-'+b.slice(6,8)+' '+b.slice(8,10)+':'+b.slice(10,12) : ''));
+  }catch(e){ showToast('⚠️ 连不上网，暂时同步不了'); }
+  btn.disabled = false; btn.textContent = '🔄 同步';
+}
+$('#syncbtn').onclick = manualSync;
 $('#go').onclick = unlock;
 $('#pw').addEventListener('keydown', e => { if(e.key==='Enter') unlock(); });
 $('#sheetClose').onclick = ()=> $('#sheet').style.display='none';
@@ -271,9 +293,13 @@ if('serviceWorker' in navigator){
 // Reopening after 10+ minutes reloads (network-first) so desktop edits show up.
 const LOADED_AT = Date.now();
 document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState==='visible' && Date.now()-LOADED_AT > 600000 && !$('#search').value) location.reload();
+  if(document.visibilityState==='visible' && Date.now()-LOADED_AT > 600000 && !$('#search').value) freshLoad();
 });
-boot();
+// data.js gets a unique URL per load: browsers keep scripts in memory by URL, so a plain
+// <script src="data.js"> can come back stale even after the file on the server changed.
+function loadData(){ return new Promise(res => { const sc = document.createElement('script');
+  sc.src = 'data.js?v=' + Date.now(); sc.onload = res; sc.onerror = res; document.head.appendChild(sc); }); }
+loadData().then(boot);
 </script>
 </body>
 </html>
